@@ -5,7 +5,9 @@
 
 ## Folder Path
 `ssh/` the folder is used for storing SSH Key that will be used on the local workstation and on the remote machine.
+
 `platform/` the folder is used for storing Vagrantfile that used for testing the playbooks.
+
 `provisioning/` folder is used for storing `roles`, `inventory`, and `ansible.cfg`.
 
 ## Vault Password File
