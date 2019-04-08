@@ -1,0 +1,50 @@
+# http://serverfault.com/a/567488
+- name: Install package without starting the associated service
+  copy:
+    src: policy-rc.d
+    dest: /usr/sbin/policy-rc.d
+    owner: root
+    group: root
+    mode: 0755
+  tags: common
+
+- name: Installing packages
+  apt:
+    name:
+      - tar
+      - python
+      - python-pip
+      - python-setuptools
+      - python-apt
+      - python3
+      - python3-pip
+      - python3-setuptools
+      - python3-apt
+      - unzip
+      - curl
+      - screen
+    state: present
+    update_cache: yes
+  tags: common
+
+  # Need at least 8.1.0 to pick up manylinux1 wheel packages
+- name: Upgrade pip2 to the latest version
+  pip: name=pip state=latest executable=pip2
+  tags: common
+
+  # Need at least 8.1.0 to pick up manylinux1 wheel packages
+- name: Upgrade pip3 to the latest version
+  pip: name=pip state=latest executable=pip3
+  tags: common
+
+- name: Add locale settings
+  copy: src="locale" dest="/etc/default/locale" owner=root group=root mode=0644
+  tags: common
+
+- name: Create Downloads dir
+  file:
+    path: '{{ downloads_dir }}'
+    state: directory
+  become: no
+  tags: common
+  
