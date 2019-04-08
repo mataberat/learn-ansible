@@ -1,0 +1,9 @@
+- name: Vagrant for default-test
+  hosts: vagrant-default-test
+  user: ubuntu
+  become: yes
+  gather_facts: yes
+
+  roles:
+  - { role: kambing-repository }
+  - { role: common }
