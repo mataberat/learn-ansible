@@ -1,0 +1,16 @@
+platform/*/.vagrant
+platform/*/*.log
+
+# OSX
+.DS_Store
+
+*.tmp
+tmp.yml
+*.retry
+*.swp
+*.tar.gz
+*.tar.xz
+*.tar.bz*
+*.zip
+*.7z
+*.rar
