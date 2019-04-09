@@ -56,10 +56,3 @@
     state: stopped
     enabled: false
   tags: common, csf
-
-- name: Disabling firewalld
-  service:
-    name: firewalld
-    state: stopped
-    enabled: false
-  tags: common, csf 
