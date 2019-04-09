@@ -1,0 +1,10 @@
+- name: Vagrant for default-webserver
+  hosts: vagrant-default-webserver
+  user: ubuntu
+  become: yes
+  gather_facts: yes
+
+  roles:
+  - { role: kambing-repository }
+  - { role: common }
+  - { role: nginx-php-fpm }
