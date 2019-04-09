@@ -35,3 +35,6 @@ sudo apt-get update -y
 
 echo -e "Installing ansible on system"
 sudo apt-get install ansible -y
+
+echo -e "Installing python-apt on system"
+sudo apt-get install python-apt-common python-apt python3-apt -y
