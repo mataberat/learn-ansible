@@ -1,3 +1,4 @@
 ---
+vagrant_host: default-test
 home_dir: /home/{{ ansible_user }}
 downloads_dir: /home/{{ ansible_user }}/Downloads
