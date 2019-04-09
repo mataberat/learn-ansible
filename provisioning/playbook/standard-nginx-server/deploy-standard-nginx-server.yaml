@@ -1,0 +1,11 @@
+- name: Vagrant for standard-nginx-server
+  hosts: tag_standard-nginx-server
+  user: ubuntu
+  become: true
+  become_method: sudo
+  gather_facts: yes
+
+  roles:
+  - { role: kambing-repository }
+  - { role: common }
+  - { role: nginx }

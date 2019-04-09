@@ -1,0 +1,9 @@
+---
+vagrant_host: standard-nginx-server
+
+csf_tcp_in: 22,80,443
+csf_tcp_out: 80,443
+csf_udp_in: 20,21,53
+csf_udp_out: 20,21,53,113,123
+
+nginx_version: 1.14.2
