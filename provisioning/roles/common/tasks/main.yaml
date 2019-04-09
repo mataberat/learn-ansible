@@ -23,6 +23,7 @@
       - unzip
       - curl
       - screen
+      - wget
     state: present
     update_cache: yes
   tags: common
