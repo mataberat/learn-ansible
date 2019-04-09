@@ -24,6 +24,7 @@
       - curl
       - screen
       - wget
+      - iptables
     state: present
     update_cache: yes
   tags: common
@@ -55,4 +56,10 @@
     state: stopped
     enabled: false
   tags: common, csf
-  
+
+- name: Disabling firewalld
+  service:
+    name: firewalld
+    state: stopped
+    enabled: false
+  tags: common, csf 
