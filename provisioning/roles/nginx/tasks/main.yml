@@ -1,27 +1,30 @@
-- name: Installing latest version of nginx
-  apt: name={{ item }} state=installed
-  with_items:
-    - nginx
-    - php-fpm
-    - php-mbstring
-    - php-xmlrpc
-    - php-soap
-    - php-gd
-    - php-xml
-    - php-intl
-    - php-mysql
-    - php-cli
-    - php-mcrypt
-    - php-ldap
-    - php-zip
-    - php-curl
+- name: Check if nginx already installed
+  command: nginx -v
+  register: nginx_installed_result
+  ignore_errors: true
+  changed_when: false
+  tags: nginx
+
+- name: Add ppa:nginx/stable
+  apt_repository:
+    repo: ppa:nginx/stable
+    update_cache: yes
+  tags: nginx
+  when: nginx_installed_result is failed
+
+- name: Installing nginx
+  apt: name="nginx={{ nginx_version }}*"
+  tags: nginx
+  when: nginx_installed_result is failed
 
 - name: Enable nginx service
   service:
     name: nginx
     enabled: true
     use: service
+    state: started
   tags: nginx
+  when: nginx_installed_result is failed
 
 - name: Restart service nginx, in all cases
   service:
