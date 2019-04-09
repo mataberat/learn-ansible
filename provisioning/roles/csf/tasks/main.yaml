@@ -1,0 +1,62 @@
+- name: Check if csf already installed
+  command: csf -v
+  register: csf_installed_result
+  ignore_errors: true
+  changed_when: false
+  tags: csf
+
+- name: Download csf packages
+  get_url:
+    url: http://download.configserver.com/csf.tgz
+    dest: "{{ downloads_dir }}"
+    mode: 0777
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  tags: csf
+  when: csf_installed_result is failed
+
+- name: Extract csf
+  unarchive:
+    src: "{{ downloads_dir }}/csf.tgz"
+    dest: "{{ home_dir }}"
+    remote_src: yes
+  tags: csf
+  when: csf_installed_result is failed
+
+- name: Installing csf
+  command: "sh install.sh"
+  args:
+    chdir: "{{ home_dir }}/csf"
+  tags: csf
+  register: install
+  when: csf_installed_result is failed
+
+- name: Copy config for csf
+  template:
+    src: 'csf.conf.j2'
+    dest: /etc/csf/csf.conf
+  register: csf_conf
+  tags: csf, csf-update
+
+- name: Enable csf
+  command: csf -e
+  tags: csf
+  when: install is succeeded
+
+- name: Enable lfd
+  service:
+    name: lfd
+    enabled: yes
+    state: started
+  tags: csf
+  when: install is succeeded
+
+# Waiting for `name: Enable csf` task is completed.
+- pause:
+    seconds: 5
+  when: install is succeeded
+
+- name: Restart csf if there's a config update
+  shell: csf -r
+  tags: csf-update
+  when: csf_conf is changed
