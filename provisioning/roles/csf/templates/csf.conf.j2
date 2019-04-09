@@ -1,3 +1,6 @@
+###############################################################################
+# SECTION:Initial Settings
+###############################################################################
 # Testing flag - enables a CRON job that clears iptables incase of
 # configuration problems when you start csf. This should be enabled until you
 # are sure that the firewall works - i.e. incase you get locked out of your
@@ -6,13 +9,94 @@
 #
 # lfd will not start while this is enabled
 TESTING = "0"
-SYSTEMCTL = "/bin/systemctl"
 
 # The interval for the crontab in minutes. Since this uses the system clock the
 # CRON job will run at the interval past the hour and not from when you issue
 # the start command. Therefore an interval of 5 minutes means the firewall
 # will be cleared in 0-5 minutes from the firewall start
 TESTING_INTERVAL = "5"
+
+# SECURITY WARNING
+# ================
+#
+# Unfortunately, syslog and rsyslog allow end-users to log messages to some
+# system logs via the same unix socket that other local services use. This 
+# means that any log line shown in these system logs that syslog or rsyslog
+# maintain can be spoofed (they are exactly the same as real log lines).
+#
+# Since some of the features of lfd rely on such log lines, spoofed messages
+# can cause false-positive matches which can lead to confusion at best, or
+# blocking of any innocent IP address or making the server inaccessible at
+# worst.
+#
+# Any option that relies on the log entries in the files listed in
+# /etc/syslog.conf and /etc/rsyslog.conf should therefore be considered
+# vulnerable to exploitation by end-users and scripts run by end-users.
+#
+# NOTE: Not all log files are affected as they may not use syslog/rsyslog
+#
+# The option RESTRICT_SYSLOG disables all these features that rely on affected
+# logs. These options are:
+# LF_SSHD LF_FTPD LF_IMAPD LF_POP3D LF_BIND LF_SUHOSIN LF_SSH_EMAIL_ALERT
+# LF_SU_EMAIL_ALERT LF_CONSOLE_EMAIL_ALERT LF_DISTATTACK LF_DISTFTP
+# LT_POP3D LT_IMAPD PS_INTERVAL UID_INTERVAL WEBMIN_LOG LF_WEBMIN_EMAIL_ALERT
+# PORTKNOCKING_ALERT
+#
+# This list of options use the logs but are not disabled by RESTRICT_SYSLOG:
+# ST_ENABLE SYSLOG_CHECK LOGSCANNER CUSTOM*_LOG
+#
+# The following options are still enabled by default on new installations so
+# that, on balance, csf/lfd still provides expected levels of security:
+# LF_SSHD LF_FTPD LF_POP3D LF_IMAPD LF_SSH_EMAIL_ALERT LF_SU_EMAIL_ALERT
+#
+# If you set RESTRICT_SYSLOG to "0" or "2" and enable any of the options listed
+# above, it should be done with the knowledge that any of the those options
+# that are enabled could be triggered by spoofed log lines and lead to the
+# server being inaccessible in the worst case. If you do not want to take that
+# risk you should set RESTRICT_SYSLOG to "1" and those features will not work
+# but you will not be protected from the exploits that they normally help block
+#
+# The recommended setting for RESTRICT_SYSLOG is "3" to restrict who can access
+# the syslog/rsyslog unix socket.
+#
+# For further advice on how to help mitigate these issues, see
+# /etc/csf/readme.txt
+#
+# 0 = Allow those options listed above to be used and configured
+# 1 = Disable all the options listed above and prevent them from being used
+# 2 = Disable only alerts about this feature and do nothing else
+# 3 = Restrict syslog/rsyslog access to RESTRICT_SYSLOG_GROUP ** RECOMMENDED **
+RESTRICT_SYSLOG = "0"
+
+# The following setting is used if RESTRICT_SYSLOG is set to 3. It restricts
+# write access to the syslog/rsyslog unix socket(s). The group must not already
+# exists in /etc/group before setting RESTRICT_SYSLOG to 3, so set the option
+# to a unique name for the server
+#
+# You can add users to this group by changing /etc/csf/csf.syslogusers and then
+# restarting lfd afterwards. This will create the system group and add the
+# users from csf.syslogusers if they exist to that group and will change the
+# permissions on the syslog/rsyslog unix socket(s). The socket(s) will be
+# monitored and the permissions re-applied should syslog/rsyslog be restarted
+#
+# Using this option will prevent some legitimate logging, e.g. end-user cron
+# job logs
+#
+# If you want to revert RESTRICT_SYSLOG to another option and disable this
+# feature, change the setting of RESTRICT_SYSLOG and then restart lfd and then
+# syslog/rsyslog and the unix sockets will be reset
+RESTRICT_SYSLOG_GROUP = "mysyslog"
+
+# This options restricts the ability to modify settings within this file from
+# the csf UI. Should the parent control panel be compromised, these restricted
+# options could be used to further compromise the server. For this reason we
+# recommend leaving this option set to at least "1" and if any of the
+# restricted items need to be changed, they are done so from the root shell
+#
+# 0 = Unrestricted UI
+# 1 = Restricted UI
+# 2 = Disabled UI
+RESTRICT_UI = "1"
 
 # Enabling auto updates creates a cron job called /etc/cron.d/csf_update which
 # runs once per day to see if there is an update to csf+lfd and upgrades if
@@ -27,6 +111,30 @@ AUTO_UPDATES = "0"
 # Lists of ports in the following comma separated lists can be added using a
 # colon (e.g. 30000:35000).
 
+# Some kernel/iptables setups do not perform stateful connection tracking
+# correctly (typically some virtual servers or custom compiled kernels), so a
+# SPI firewall will not function correctly. If this happens, LF_SPI can be set
+# to 0 to reconfigure csf as a static firewall.
+#
+# As connection tracking will not be configured, applications that rely on it
+# will not function unless all outgoing ports are opened. Therefore, all
+# outgoing connections will be allowed once all other tests have completed. So
+# TCP_OUT, UDP_OUT and ICMP_OUT will not have any affect.
+#
+# If you allow incoming DNS lookups you may need to use the following
+# directive in the options{} section of your named.conf:
+#
+#        query-source port 53;
+#
+# This will force incoming DNS traffic only through port 53
+#
+# Disabling this option will break firewall functionality that relies on
+# stateful packet inspection (e.g. DNAT, PACKET_FILTER) and makes the firewall
+# less secure
+#
+# This option should be set to "1" in all other circumstances
+LF_SPI = "1"
+
 # Allow incoming TCP ports
 TCP_IN = "{{ csf_tcp_in }}"
 
@@ -34,26 +142,51 @@ TCP_IN = "{{ csf_tcp_in }}"
 TCP_OUT = "{{ csf_tcp_out }}"
 
 # Allow incoming UDP ports
-UDP_IN = ""
+UDP_IN = "{{ csf_udp_in }}"
 
 # Allow outgoing UDP ports
 # To allow outgoing traceroute add 33434:33523 to this list 
-UDP_OUT = "53,123"
+UDP_OUT = "{{ csf_udp_out }}"
 
-# Allow incoming PING
+# Allow incoming PING. Disabling PING will likely break external uptime
+# monitoring
 ICMP_IN = "1"
 
-# Set the per IP address incoming ICMP packet rate
-# To disable rate limiting set to "0"
+# Set the per IP address incoming ICMP packet rate for PING requests. This
+# ratelimits PING requests which if exceeded results in silently rejected
+# packets. Disable or increase this value if you are seeing PING drops that you
+# do not want
+#
+# To disable rate limiting set to "0", otherwise set according to the iptables
+# documentation for the limit module. For example, "1/s" will limit to one
+# packet per second
 ICMP_IN_RATE = "1/s"
 
 # Allow outgoing PING
+#
+# Unless there is a specific reason, this option should NOT be disabled as it
+# could break OS functionality
 ICMP_OUT = "1"
 
-# Set the per IP address outgoing ICMP packet rate (hits per second allowed),
-# e.g. "1/s"
-# To disable rate limiting set to "0"
+# Set the per IP address outgoing ICMP packet rate for PING requests. This
+# ratelimits PING requests which if exceeded results in silently rejected
+# packets. Disable or increase this value if you are seeing PING drops that you
+# do not want
+#
+# Unless there is a specific reason, this option should NOT be enabled as it
+# could break OS functionality
+#
+# To disable rate limiting set to "0", otherwise set according to the iptables
+# documentation for the limit module. For example, "1/s" will limit to one
+# packet per second
 ICMP_OUT_RATE = "0"
+
+# For those with PCI Compliance tools that state that ICMP timestamps (type 13)
+# should be dropped, you can enable the following option. Otherwise, there
+# appears to be little evidence that it has anything to do with a security risk
+# and can impact network performance, so should be left disabled by everyone
+# else
+ICMP_TIMESTAMPDROP = "0"
 
 ###############################################################################
 # SECTION:IPv6 Port Settings
@@ -65,19 +198,22 @@ ICMP_OUT_RATE = "0"
 #
 # Supported:
 # Temporary ACCEPT/DENY, GLOBAL_DENY, GLOBAL_ALLOW, SMTP_BLOCK, LF_PERMBLOCK,
-# PACKET_FILTER, WATCH_MODE, Advanced Allow/Deny Filters, RELAY_*, CLUSTER_*
+# PACKET_FILTER, Advanced Allow/Deny Filters, RELAY_*, CLUSTER_*, CC6_LOOKUPS, 
+# SYNFLOOD, LF_NETBLOCK
 #
-# SMTP_BLOCK is only applied if port 25 is included in TCP6_OUT
+# Supported if CC6_LOOKUPS and CC_LOOKUPS are enabled
+# CC_DENY, CC_ALLOW, CC_ALLOW_FILTER, CC_IGNORE, CC_ALLOW_PORTS, CC_DENY_PORTS,
+# CC_ALLOW_SMTPAUTH
+#
+# Supported if ip6tables >= 1.4.3:
+# PORTFLOOD, CONNLIMIT
+#
+# Supported if ip6tables >= 1.4.17 and perl module IO::Socket::INET6 is
+# installed:
+# MESSENGER DOCKER SMTP_REDIRECT
 #
 # Not supported:
-# DYNDNS, CC_DENY, CC_ALLOW, CC_ALLOW_FILTER, LF_DSHIELD, LF_SPAMHAUS,
-# SYNFLOOD, PORTFLOOD, DYNDNS, ICMP_IN, ICMP_OUT, LF_NETBLOCK, MESSENGER,
-# CC_IGNORE, CONNLIMIT, CC_ALLOW_PORTS
-#
-# Partially supported:
-# CC_LOOKUPS - reverse DNS only and requires the perl module Socket6 from cpan
-#
-# MESSENGER service - not supported: no REDIRECT support in ip6tables as yet
+# ICMP_IN, ICMP_OUT
 #
 IPV6 = "1"
 
@@ -90,35 +226,38 @@ IPV6_ICMP_STRICT = "0"
 # Pre v2.6.20 kernel must set this option to "0" as no working state module is
 # present, so a static firewall is configured as a fallback
 #
-# Because connection tracking does not work on such kernels, applications that
-# rely on it (e.g. apache, passive ftp, etc) will not function unless you open
-# all outgoing ports. To do this set the following:
+# A workaround has been added for CentOS/RedHat v5 and custom kernels that do
+# not support IPv6 connection tracking by opening ephemeral port range
+# 32768:61000. This is only applied if IPV6_SPI is not enabled. This is the
+# same workaround implemented by RedHat in the sample default IPv6 rules
 #
-# TCP6_OUT = "0:65535"
-# UDP6_OUT = "0:65535"
+# As connection tracking will not be configured, applications that rely on it
+# will not function unless all outgoing ports are opened. Therefore, all
+# outgoing connections will be allowed once all other tests have completed. So
+# TCP6_OUT, UDP6_OUT and ICMP6_OUT will not have any affect.
 #
-# If you allow incoming ipv6 DNS lookups you will need to use the following
+# If you allow incoming ipv6 DNS lookups you may need to use the following
 # directive in the options{} section of your named.conf:
 #
 #        query-source-v6 port 53;
 #
 # This will force ipv6 incoming DNS traffic only through port 53
 #
-# These changes are note necessary if the SPI firewall is used
+# These changes are not necessary if the SPI firewall is used
 IPV6_SPI = "1"
 
 # Allow incoming IPv6 TCP ports
-TCP6_IN = "22,80,443"
+TCP6_IN = "{{ csf_tcp_in }}"
 
-# Allow outgoing TCP ports
-TCP6_OUT = "22,25,53,80,443"
+# Allow outgoing IPv6 TCP ports
+TCP6_OUT = "{{ csf_tcp_out }}"
 
-# Allow incoming UDP ports
-UDP6_IN = ""
+# Allow incoming IPv6 UDP ports
+UDP6_IN = "{{ csf_udp_in }}"
 
-# Allow outgoing UDP ports
+# Allow outgoing IPv6 UDP ports
 # To allow outgoing traceroute add 33434:33523 to this list 
-UDP6_OUT = "53"
+UDP6_OUT = "{{ csf_udp_out }}"
 
 ###############################################################################
 # SECTION:General Settings
@@ -137,9 +276,22 @@ ETH6_DEVICE = ""
 # a comma separated list (e.g "eth1,eth2")
 ETH_DEVICE_SKIP = ""
 
-# To switch from the deprecated iptables "state" module to the "conntrack"
-# module, change this to 1
+# This option should be enabled unless the kernel does not support the
+# "conntrack" module
+#
+# To use the deprecated iptables "state" module, change this to 0
 USE_CONNTRACK = "1"
+
+# Enable ftp helper via the iptables CT target on supporting kernels (v2.6.34+)
+# instead of the current method via /proc/sys/net/netfilter/nf_conntrack_helper
+# This will also remove the RELATED target from the global state iptables rule
+#
+# This is not needed (and will be ignored) if LF_SPI/IPV6_SPI is disabled or
+# the raw tables do not exist. The USE_CONNTRACK option should be enabled
+#
+# To enable this option, set it to your FTP server listening port number
+# (normally 21), do NOT set it to "1"
+USE_FTPHELPER = "0"
 
 # Check whether syslog is running. Many of the lfd checks require syslog to be
 # running correctly. This test will send a coded message to syslog every
@@ -147,7 +299,7 @@ USE_CONNTRACK = "1"
 # message. If it fails to do so within SYSLOG_CHECK seconds an alert using
 # syslogalert.txt is sent
 #
-# A value of betwen 300 and 3600 seconds is suggested. Set to 0 to disable
+# A value of between 300 and 3600 seconds is suggested. Set to 0 to disable
 SYSLOG_CHECK = "0"
 
 # Enable this option if you want lfd to ignore (i.e. don't block) IP addresses
@@ -169,18 +321,20 @@ DNS_STRICT = "0"
 # server but could help prevent abuse of the local DNS server
 DNS_STRICT_NS = "0"
 
-# Limit the number of IP's kept in the /etc/csf/csf.deny file. This can be
-# important as a large number of IP addresses create a large number of iptables
-# rules (4 times the number of IP's) which can cause problems on some systems
-# where either the the number of iptables entries has been limited (esp VPS's)
-# or where resources are limited. This can result in slow network performance,
-# or, in the case of iptables entry limits, can prevent your server from
-# booting as not all the required iptables chain settings will be correctly
-# configured. The value set here is the maximum number of IPs/CIDRs allowed
+# Limit the number of IP's kept in the /etc/csf/csf.deny file
+#
+# Care should be taken when increasing this value on servers with low memory
+# resources or hard limits (such as Virtuozzo/OpenVZ) as too many rules (in the
+# thousands) can sometimes cause network slowdown
+#
+# The value set here is the maximum number of IPs/CIDRs allowed
 # if the limit is reached, the entries will be rotated so that the oldest
 # entries (i.e. the ones at the top) will be removed and the latest is added.
 # The limit is only checked when using csf -d (which is what lfd also uses)
 # Set to 0 to disable limiting
+#
+# For implementations wishing to set this value significantly higher, we
+# recommend using the IPSET option
 DENY_IP_LIMIT = "200"
 
 # Limit the number of IP's kept in the temprary IP ban list. If the limit is
@@ -197,31 +351,104 @@ LF_DAEMON = "1"
 # unless TESTING is enabled above. The check is done every 300 seconds
 LF_CSF = "1"
 
-# If you enable this option then whenever a CLI request to restart csf is used
-# (i.e. -s, --start, -r, --restart, -q, --startq) then instead of csf
-# rebuilding the iptables rules, csf will indicate to lfd to rebuild them
-# instead, within LF_PARSE seconds
+# This option uses IPTABLES_SAVE, IPTABLES_RESTORE and IP6TABLES_SAVE,
+# IP6TABLES_RESTORE in two ways:
 #
-# This feature can be particularly helpful for (re)starting configurations with
-# a large number of rules, e.g. those using CC block/allow lists. It can also
-# speed up boot times by deferring csf startup to the lfd process rather than
-# the init process
-LF_QUICKSTART = "0"
+# 1. On a clean server reboot the entire csf iptables configuration is saved
+#    and then restored where possible to provide a near instant firewall
+#    startup[*]
+#
+# 2. On csf restart or lfd reloading tables, CC_* as well as SPAMHAUS, DSHIELD,
+#    BOGON, TOR are loaded using this method in a fraction of the time than if
+#    this setting is disabled
+#
+# [*]Not supported on all OS platforms
+#
+# Set to "0" to disable this functionality
+FASTSTART = "1"
+
+# This option allows you to use ipset v6+ for the following csf options:
+# CC_* and /etc/csf/csf.blocklist, /etc/csf/csf.allow, /etc/csf/csf.deny,
+# GLOBAL_DENY, GLOBAL_ALLOW, DYNDNS, GLOBAL_DYNDNS, MESSENGER
+#
+# ipset will only be used with the above options when listing IPs and CIDRs.
+# Advanced Allow Filters and temporary blocks use traditional iptables
+#
+# Using ipset moves the onus of ip matching against large lists away from
+# iptables rules and to a purpose built and optimised database matching
+# utility. It also simplifies the switching in of updated lists
+#
+# To use this option you must have a fully functioning installation of ipset
+# installed either via rpm or source from http://ipset.netfilter.org/
+# 
+# Note: Using ipset has many advantages, some disadvantages are that you will
+# no longer see packet and byte counts against IPs and it makes identifying
+# blocked/allowed IPs that little bit harder
+#
+# Note: If you mainly use IP address only entries in csf.deny, you can increase
+# the value of DENY_IP_LIMIT significantly if you wish
+# 
+# Note: It's highly unlikely that ipset will function on Virtuozzo/OpenVZ
+# containers even if it has been installed
+#
+# If you find any problems, please post on forums.configserver.com with full
+# details of the issue
+LF_IPSET = "0"
+
+# Versions of iptables greater or equal to v1.4.20 should support the --wait
+# option. This forces iptables commands that use the option to wait until a
+# lock by any other process using iptables completes, rather than simply
+# failing
+#
+# Enabling this feature will add the --wait option to iptables commands
+#
+# NOTE: The disadvantage of using this option is that any iptables command that
+# uses it will hang until the lock is released. This could cause a cascade of
+# hung processes trying to issue iptables commands. To try and avoid this issue
+# csf uses a last ditch timeout, WAITLOCK_TIMEOUT in seconds, that will trigger
+# a failure if reached
+WAITLOCK = "1"
+WAITLOCK_TIMEOUT = "300"
+
+# The following sets the hashsize for ipset sets, which must be a power of 2.
+#
+# Note: Increasing this value will consume more memory for all sets
+# Default: "1024"
+LF_IPSET_HASHSIZE = "1024"
+
+# The following sets the maxelem for ipset sets.
+#
+# Note: Increasing this value will consume more memory for all sets
+# Default: "65536"
+LF_IPSET_MAXELEM = "65536"
+
+# If you enable this option then whenever a CLI request to restart csf is used
+# lfd will restart csf instead within LF_PARSE seconds
+#
+# This feature can be helpful for restarting configurations that cannot use
+# FASTSTART
+LFDSTART = "0"
 
 # Enable verbose output of iptables commands
 VERBOSE = "1"
 
-# Enable packet filtering for unwanted or illegal packets. This will drop
-# packets that iptables has deemed INVALID (i.e. there is no established TCP
-# connection in the state table), or if the TCP flags in the packet are out of
-# sequence or illegal in the protocol exchange.
-#
-# If you see packets being dropped that you would rather allow then disable
-# this option by setting it to "0"
+# Drop out of order packets and packets in an INVALID state in iptables
+# connection tracking
 PACKET_FILTER = "1"
 
 # Perform reverse DNS lookups on IP addresses. (See also CC_LOOKUPS)
 LF_LOOKUPS = "1"
+
+# Custom styling is possible in the csf UI. See the readme.txt for more
+# information under "UI skinning and Mobile View"
+#
+# This option enables the use of custom styling. If the styling fails to work
+# correctly, e.g. custom styling does not take into account a change in the
+# standard csf UI, then disabling this option will return the standard UI
+STYLE_CUSTOM = "0"
+
+# This option disables the presence of the Mobile View in the csf UI
+STYLE_MOBILE = "1"
 
 ###############################################################################
 # SECTION:SMTP Settings
@@ -242,6 +469,11 @@ SMTP_BLOCK = "0"
 # allow outgoing SMTP connections to the loopback device
 SMTP_ALLOWLOCAL = "1"
 
+# This option redirects outgoing SMTP connections destined for remote servers
+# for non-bypass users to the local SMTP server to force local relaying of
+# email. Such email may require authentication (SMTP AUTH)
+SMTP_REDIRECT = "0"
+
 # This is a comma separated list of the ports to block. You should list all
 # ports that exim is configured to listen on
 SMTP_PORTS = "25,465,587"
@@ -252,6 +484,32 @@ SMTP_PORTS = "25,465,587"
 # Note: root (UID:0) is always allowed
 SMTP_ALLOWUSER = ""
 SMTP_ALLOWGROUP = "mail,mailman"
+
+# This option will only allow SMTP AUTH to be advertised to the IP addresses
+# listed in /etc/csf/csf.smtpauth on EXIM mail servers
+#
+# The additional option CC_ALLOW_SMTPAUTH can be used with this option to
+# additionally restrict access to specific countries
+#
+# This is to help limit attempts at distributed attacks against SMTP AUTH which
+# are difficult to achive since port 25 needs to be open to relay email
+#
+# The reason why this works is that if EXIM does not advertise SMTP AUTH on a
+# connection, then SMTP AUTH will not accept logins, defeating the attacks
+# without restricting mail relaying
+#
+# Note: csf and lfd must be restarted if /etc/csf/csf.smtpauth is modified so
+# that the lookup file in /etc/exim.smtpauth is regenerated from the
+# information from /etc/csf/csf.smtpauth plus any countries listed in
+# CC_ALLOW_SMTPAUTH
+#
+# NOTE: To make this option work you MUST make the modifications to exim.conf
+# as explained in "Exim SMTP AUTH Restriction" section in /etc/csf/readme.txt
+# after enabling the option here, otherwise this option will not work
+#
+# To enable this option, set to 1 and make the exim configuration changes
+# To disable this option, set to 0 and undo the exim configuration changes
+SMTPAUTH_RESTRICT = "0"
 
 ###############################################################################
 # SECTION:Port Flood Settings
@@ -303,6 +561,23 @@ CONNLIMIT = ""
 # this server
 PORTFLOOD = ""
 
+# Outgoing UDP Flood Protection. This option limits outbound UDP packet floods.
+# These typically originate from exploit scripts uploaded through vulnerable
+# web scripts. Care should be taken on servers that use services that utilise
+# high levels of UDP outbound traffic, such as SNMP, so you may need to alter
+# the UDPFLOOD_LIMIT and UDPFLOOD_BURST options to suit your environment
+#
+# We recommend enabling User ID Tracking (UID_INTERVAL) with this feature
+UDPFLOOD = "0"
+UDPFLOOD_LIMIT = "100/s"
+UDPFLOOD_BURST = "500"
+
+# This is a list of usernames that should not be rate limited, such as "named"
+# to prevent bind traffic from being limited.
+#
+# Note: root (UID:0) is always allowed
+UDPFLOOD_ALLOWUSER = "named"
+
 ###############################################################################
 # SECTION:Logging Settings
 ###############################################################################
@@ -310,31 +585,55 @@ PORTFLOOD = ""
 # perl module Sys::Syslog installed to use this feature
 SYSLOG = "0"
 
-# Drop target for iptables rules. This can be set to either DROP ot REJECT.
-# REJECT will send back an error packet, DROP will not respond at all. REJECT
-# is more polite, however it does provide extra information to a hacker and
-# lets them know that a firewall is blocking their attempts. DROP hangs their
-# connection, thereby frustrating attempts to port scan the server.
+# Drop target for incoming iptables rules. This can be set to either DROP or
+# REJECT. REJECT will send back an error packet, DROP will not respond at all.
+# REJECT is more polite, however it does provide extra information to a hacker
+# and lets them know that a firewall is blocking their attempts. DROP hangs
+# their connection, thereby frustrating attempts to port scan the server
 DROP = "DROP"
+
+# Drop target for outgoing iptables rules. This can be set to either DROP or
+# REJECT as with DROP, however as such connections are from this server it is
+# better to REJECT connections to closed ports rather than to DROP them. This
+# helps to immediately free up server resources rather than tying them up until
+# a connection times out. It also tells the process making the connection that
+# it has immediately failed
+#
+# It is possible that some monolithic kernels may not support the REJECT
+# target. If this is the case, csf checks before using REJECT and falls back to
+# using DROP, issuing a warning to set this to DROP instead
+DROP_OUT = "REJECT"
 
 # Enable logging of dropped connections to blocked ports to syslog, usually
 # /var/log/messages. This option needs to be enabled to use Port Scan Tracking
 DROP_LOGGING = "1"
 
-# Enable logging of dropped connections to blocked IP addresses in csf.deny or
-# by lfd with temporary connection tracking blocks
+# Enable logging of dropped incoming connections from blocked IP addresses
 #
 # This option will be disabled if you enable Port Scan Tracking (PS_INTERVAL)
 DROP_IP_LOGGING = "0"
 
-# Only log reserved port dropped connections (0:1023). Useful since you're not
-# usually bothered about ephemeral port drops
+# Enable logging of dropped outgoing connections
+#
+# Note: Only outgoing SYN packets for TCP connections are logged, other
+# protocols log all packets
+#
+# We recommend that you enable this option
+DROP_OUT_LOGGING = "1"
+
+# Together with DROP_OUT_LOGGING enabled, this option logs the UID connecting
+# out (where available) which can help track abuse
+DROP_UID_LOGGING = "1"
+
+# Only log incoming reserved port dropped connections (0:1023). This can reduce
+# the amount of log noise from dropped connections, but will affect options
+# such as Port Scan Tracking (PS_INTERVAL)
 DROP_ONLYRES = "0"
 
 # Commonly blocked ports that you do not want logging as they tend to just fill
 # up the log file. These ports are specifically blocked (applied to TCP and UDP
 # protocols) for incoming connections
-DROP_NOLOG = "67,68,111,113,135:139,445,500,513,520"
+DROP_NOLOG = "23,67,68,111,113,135:139,445,500,513,520"
 
 # Log packets dropped by the packet filtering option PACKET_FILTER
 DROP_PF_LOGGING = "0"
@@ -344,16 +643,14 @@ DROP_PF_LOGGING = "0"
 # addresses breaking the Connection Limit Protection will be blocked
 CONNLIMIT_LOGGING = "0"
 
+# Enable logging of UDP floods. This should be enabled, especially with User ID
+# Tracking enabled
+UDPFLOOD_LOGGING = "1"
+
 # Send an alert if log file flooding is detected which causes lfd to skip log
 # lines to prevent lfd from looping. If this alert is sent you should check the
 # reported log file for the reason for the flooding
 LOGFLOOD_ALERT = "0"
-
-# Configure csf to watch IP addresses (with csf -w [ip]). This option will add 
-# overhead to packet traversal through iptables and syslog logging, so should
-# only be enabled while actively watching IP addresses. See readme.txt for more
-# information on the use of this option
-WATCH_MODE = "0"
 
 ###############################################################################
 # SECTION:Reporting Settings
@@ -394,15 +691,19 @@ UNBLOCK_REPORT = ""
 
 # In addition to the standard lfd email alerts, you can additionally enable the
 # sending of X-ARF reports (see http://www.x-arf.org/specification.html). Only
-# block alert messages will be sent.
+# block alert messages will be sent. The reports use our schema at:
+# https://download.configserver.com/abuse_login-attack_0.2.json
 #
 # These reports are in a format accepted by many Netblock owners and should
 # help them investigate abuse. This option is not designed to automatically
 # forward these reports to the Netblock owners and should be checked for
 # false-positive blocks before reporting
 #
+# If available, the report will also include the abuse contact for the IP from
+# the Abusix Contact DB: https://abusix.com/contactdb.html
+#
 # Note: The following block types are not reported through this feature:
-#       LF_PERMBLOCK, LF_NETBLOCK, LF_DISTATTACK, LF_DISTFTP, RT_*_ALERT
+# LF_PERMBLOCK, LF_NETBLOCK, LF_DISTATTACK, LF_DISTFTP, RT_*_ALERT
 X_ARF = "0"
 
 # By default, lfd will send emails from the root forwarder. Setting the
@@ -412,6 +713,24 @@ X_ARF_FROM = ""
 # By default, lfd will send emails to the root forwarder. Setting the following
 # option will override this
 X_ARF_TO = ""
+
+# If you want to automatically send reports to the abuse contact where found,
+# you can enable the following option
+#
+# Note: You MUST set X_ARF_FROM to a valid email address for this option to
+# work. This is so that the abuse contact can reply to the report
+#
+# However, you should be aware that without manual checking you could be
+# reporting innocent IP addresses, including your own clients, yourself and
+# your own servers
+#
+# Additionally, just because a contact address is found, does not mean that
+# there is anyone on the end of it reading, processing or acting on such
+# reports and you could conceivably reported for sending spam
+#
+# We do not recommend enabling this option. Abuse reports should be checked and
+# verified before being forwarded to the abuse contact
+X_ARF_ABUSE = "0"
 
 ###############################################################################
 # SECTION:Temp to Perm/Netblock Settings
@@ -438,7 +757,7 @@ LF_PERMBLOCK_ALERT = "1"
 # LF_NETBLOCK  to "1" to enable this feature
 #
 # This can be an affective way of blocking DDOS attacks launched from within
-# the same networ class
+# the same network class
 #
 # Valid settings for LF_NETBLOCK_CLASS are "A", "B" and "C", care and
 # consideration is required when blocking network classes A or B
@@ -450,8 +769,15 @@ LF_NETBLOCK_COUNT = "4"
 LF_NETBLOCK_CLASS = "C"
 LF_NETBLOCK_ALERT = "1"
 
+# Valid settings for LF_NETBLOCK_IPV6 are "/64", "/56", "/48", "/32" and "/24"
+# Great care should be taken with IPV6 netblock ranges due to the large number
+# of addresses involved
+#
+# To disable IPv6 netblocks set to ""
+LF_NETBLOCK_IPV6 = ""
+
 ###############################################################################
-# SECTION:Global Lists/DYNDNS/Blacklists
+# SECTION:Global Lists/DYNDNS/Blocklists
 ###############################################################################
 # Safe Chain Update. If enabled, all dynamic update chains (GALLOW*, GDENY*,
 # SPAMHAUS, DSHIELD, BOGON, CC_ALLOW, CC_DENY, ALLOWDYN*) will create a new
@@ -474,6 +800,10 @@ SAFECHAINUPDATE = "0"
 # records in csf.dyndns and then set the following to the number of seconds to
 # poll for a change in the IP address. If the IP address has changed iptables
 # will be updated.
+#
+# If the FQDN has multiple A records then all of the IP addresses will be
+# processed. If IPV6 is enabled, then all IPv6 AAAA IP address records will
+# also be allowed.
 # 
 # A setting of 600 would check for IP updates every 10 minutes. Set the value
 # to 0 to disable the feature
@@ -515,96 +845,79 @@ GLOBAL_DYNDNS_INTERVAL = "600"
 # option to 1
 GLOBAL_DYNDNS_IGNORE = "0"
 
-# Enable IP range blocking using the DShield Block List at
-# http://feeds.dshield.org/block.txt
-# To enable this feature, set the following to the interval in seconds that you
-# want the block list updated. The list is reasonably static during the length
-# of a day, so it would be appropriate to only update once every 24 hours, so
-# a value of "86400" is recommended
-LF_DSHIELD = "0"
-
-# The DShield block list URL. If you change this to something else be sure it
-# is in the same format as the block list
-LF_DSHIELD_URL = "http://feeds.dshield.org/block.txt"
-
-# Enable IP range blocking using the Spamhaus DROP List at
-# http://www.spamhaus.org/drop/index.lasso
-# To enable this feature, set the following to the interval in seconds that you
-# want the block list updated. The list is reasonably static during the length
-# of a day, so it would be appropriate to only update once every 24 hours, so
-# a value of "86400" is recommended
-LF_SPAMHAUS = "0"
-
-# Also include the Extended Spamhaus Drop List at
-# http://www.spamhaus.org/drop/index.lasso
+# Blocklists are controlled by modifying /etc/csf/csf.blocklists
 #
-# Set this option to "0" to not also use this extended list
-LF_SPAMHAUS_EXTENDED = "1"
-
-# The Spamhaus DROP List URL. If you change this to something else be sure it
-# is in the same format as the drop list
-LF_SPAMHAUS_URL = "http://www.spamhaus.org/drop/drop.lasso"
-LF_SPAMHAUS_EXTENDED_URL = "http://www.spamhaus.org/drop/edrop.lasso"
-
-# Enable IP range blocking using the TOR Bulk Exit List at
-# http://exitlist.torproject.org/exit-addresses
-#
-# Warning: This could block legitimate users who are trying to protect their
-# anonymity, so use with caution
-#
-# At the time of introduction of this feature there are around 750 exit nodes
-#
-# To enable this feature, set the following to the interval in seconds that you
-# want the block list updated. A value of "86400" is recommended
-LF_TOR = "0"
-
-# The Tor Bulk Exit List URL. If you change this to something else be sure it
-# is in the same format as the drop list
-LF_TOR_URL = "http://exitlist.torproject.org/exit-addresses"
-
-# Enable IP range blocking using the BOGON List at
-# http://www.cymru.com/Bogons/
-# To enable this feature, set the following to the interval in seconds that you
-# want the block list updated. The list is reasonably static during the length
-# of a day, so it would be appropriate to only update once every 24 hours, so
-# a value of "86400" is recommended
-#
-# If your server uses IP's on the BOGON list then you will need to list the
-# affected NICs in LF_BOGON_SKIP
-LF_BOGON = "0"
-
-# The BOGON List URL. If you change this to something else be sure it
-# is in the same format as the drop list
-LF_BOGON_URL = "http://www.cymru.com/Documents/bogon-bn-agg.txt"
-
 # If you don't want BOGON rules applied to specific NICs, then list them in
 # a comma separated list (e.g "eth1,eth2")
 LF_BOGON_SKIP = ""
+
+# The following option can be used to select either HTTP::Tiny or
+# LWP::UserAgent to retrieve URL data. HTTP::Tiny is much faster than
+# LWP::UserAgent and is included in the csf distribution. LWP::UserAgent may
+# have to be installed manually, but it can better support https:// URL's
+# which also needs the LWP::Protocol::https perl module
+#
+# For example:
+#
+# On rpm based systems:
+# 
+#   yum install perl-libwww-perl.noarch perl-LWP-Protocol-https.noarch
+#
+# On APT based systems:
+#
+#   apt-get install libwww-perl liblwp-protocol-https-perl
+#
+# Via cpan:
+#
+#   perl -MCPAN -eshell
+#   cpan> install LWP LWP::Protocol::https
+#
+# We recommend setting this set to "2" as upgrades to csf will be performed
+# over SSL to https://download.configserver.com and
+# https://download2.configserver.com
+#
+# "1" = HTTP::Tiny
+# "2" = LWP::UserAgent
+URLGET = "2"
+
+# If you need csf/lfd to use a proxy, then you can set this option to the URL
+# of the proxy. The proxy provided will be used for both HTTP and HTTPS
+# connections
+URLPROXY = ""
 
 ###############################################################################
 # SECTION:Country Code Lists and Settings
 ###############################################################################
 # Country Code to CIDR allow/deny. In the following two options you can allow
 # or deny whole country CIDR ranges. The CIDR blocks are generated from the
-# Maxmind GeoLite Country database http://www.maxmind.com/app/geolitecountry
-# and entirely relies on that service being available
+# MaxMind GeoLite2 Country database at:
+# https://dev.MaxMind.com/geoip/geoip2/geolite2/
+# This feature relies entirely on that service being available
 #
 # Specify the the two-letter ISO Country Code(s). The iptables rules are for
 # incoming connections only
 #
-# Warning: These lists are never 100% accurate and some ISP's (e.g. AOL) use
+# Additionally, ASN numbers can also be added to the comma separated lists
+# below that also list Country Codes. The same WARNINGS for Country Codes apply
+# to the use of ASNs. More about Autonomous System Numbers (ASN):
+# http://www.iana.org/assignments/as-numbers/as-numbers.xhtml
+#
+# You should consider using LF_IPSET when using any of the following options
+#
+# WARNING: These lists are never 100% accurate and some ISP's (e.g. AOL) use
 # non-geographic IP address designations for their clients
 #
-# Warning: Some of the CIDR lists are huge and each one requires a rule within
+# WARNING: Some of the CIDR lists are huge and each one requires a rule within
 # the incoming iptables chain. This can result in significant performance
 # overheads and could render the server inaccessible in some circumstances. For
 # this reason (amongst others) we do not recommend using these options
 #
-# Warning: Due to the resource constraints on VPS servers this feature should
+# WARNING: Due to the resource constraints on VPS servers this feature should
 # not be used on such systems unless you choose very small CC zones
 #
-# Warning: CC_ALLOW allows access through all ports in the firewall. For this
-# reason CC_ALLOW probably has very limited use
+# WARNING: CC_ALLOW allows access through all ports in the firewall. For this
+# reason CC_ALLOW probably has very limited use and CC_ALLOW_FILTER is
+# preferred
 #
 # Each option is a comma separated list of CC's, e.g. "US,GB,DE"
 CC_DENY = ""
@@ -632,10 +945,44 @@ CC_ALLOW_PORTS = ""
 CC_ALLOW_PORTS_TCP = ""
 CC_ALLOW_PORTS_UDP = ""
 
+# This option denies access from the following countries to specific ports
+# listed in CC_DENY_PORTS_TCP and CC_DENY_PORTS_UDP
+#
+# Note: The rules for this feature are inserted after the allow and deny
+# rules to still allow allowing of IP addresses
+#
+# Each option is a comma separated list of CC's, e.g. "US,GB,DE"
+CC_DENY_PORTS = ""
+
+# This option uses the same format as TCP_IN/UDP_IN. The ports listed should
+# NOT be removed from TCP_IN/UDP_IN
+#
+# An example would be to list port 21 here then counties listed in
+# CC_DENY_PORTS cannot access FTP
+CC_DENY_PORTS_TCP = ""
+CC_DENY_PORTS_UDP = ""
+
 # This Country Code list will prevent lfd from blocking IP address hits for the
-# listed CC's. This option could cause performance issues and is generally not
-# recommended
+# listed CC's
+#
+# CC_LOOKUPS must be enabled to use this option
 CC_IGNORE = ""
+
+# This Country Code list will only allow SMTP AUTH to be advertised to the
+# listed countries in EXIM. This is to help limit attempts at distributed
+# attacks against SMTP AUTH which are difficult to achive since port 25 needs
+# to be open to relay email
+#
+# The reason why this works is that if EXIM does not advertise SMTP AUTH on a
+# connection, then SMTP AUTH will not accept logins, defeating the attacks
+# without restricting mail relaying
+#
+# This option can generate a very large list of IP addresses that could easily
+# severely impact on SMTP (mail) performance, so care must be taken when
+# selecting countries and if performance issues ensue
+#
+# The option SMTPAUTH_RESTRICT must be enabled to use this option
+CC_ALLOW_SMTPAUTH = ""
 
 # Set this option to a valid CIDR (i.e. 1 to 32) to ignore CIDR blocks smaller
 # than this value when implementing CC_DENY/CC_ALLOW/CC_ALLOW_FILTER. This can
@@ -649,17 +996,40 @@ CC_DROP_CIDR = ""
 
 # Display Country Code and Country for reported IP addresses. This option can
 # be configured to use the MaxMind Country Database or the more detailed (and
-# much larger and therefore slower) MaxMind City Database
+# much larger and therefore slower) MaxMind City Database. An additional option
+# is also available if you cannot use the MaxMind databases
 #
 # "0" - disable
 # "1" - Reports: Country Code and Country
 # "2" - Reports: Country Code and Country and Region and City
+# "3" - Reports: Country Code and Country and Region and City and ASN
+# "4" - Reports: Country Code and Country and Region and City (freegeoip.net)
+#
+# Note: "4" does not use the MaxMind databases directly for lookups. Instead it
+# uses a URL-based lookup from a third-party provider at https://freegeoip.net
+# and so avoids having to download and process the large databases. Please
+# visit the https://freegeoip.net and read their limitations and respect that
+# this option will either cease to function or be removed by us if that site is
+# abused or overloaded. ONLY use this option if you have difficulties using the
+# MaxMind databases. This option is ONLY for IP lookups, NOT when using the
+# CC_* options above, which will continue to use the MaxMind databases
+#
 CC_LOOKUPS = "1"
 
-# This option tells lfd how often to retrieve the Maxmind GeoLite Country
+# Display Country Code and Country for reported IPv6 addresses using the
+# MaxMind Country IPv6 Database
+#
+# "0" - disable
+# "1" - enable and report the detail level as specified in CC_LOOKUPS
+#
+# This option must also be enabled to allow IPv6 support to CC_*, MESSENGER and
+# PORTFLOOD
+CC6_LOOKUPS = "0"
+
+# This option tells lfd how often to retrieve the MaxMind GeoLite2 Country
 # database for CC_ALLOW, CC_ALLOW_FILTER, CC_DENY, CC_IGNORE and CC_LOOKUPS (in
 # days)
-CC_INTERVAL = "7"
+CC_INTERVAL = "14"
 
 ###############################################################################
 # SECTION:Login Failure Blocking and Alerts
@@ -690,16 +1060,24 @@ LF_TRIGGER_PERM = "1"
 # To only block access to the failed application instead of a complete block
 # for an ip address, you can set the following to "1", but LF_TRIGGER must be
 # set to "0" with specific application[*] trigger levels also set appropriately
+#
+# The ports that are blocked can be configured by changing the PORTS_* options
 LF_SELECT = "0"
 
 # Send an email alert if an IP address is blocked by one of the [*] triggers
-LF_EMAIL_ALERT = "0"
+LF_EMAIL_ALERT = "1"
 
 # [*]Enable login failure detection of sshd connections
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
 LF_SSHD = "5"
 LF_SSHD_PERM = "1"
 
 # [*]Enable login failure detection of ftp connections
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
 LF_FTPD = "10"
 LF_FTPD_PERM = "1"
 
@@ -707,12 +1085,22 @@ LF_FTPD_PERM = "1"
 LF_SMTPAUTH = "5"
 LF_SMTPAUTH_PERM = "1"
 
+# [*]Enable syntax failure detection of Exim connections
+LF_EXIMSYNTAX = "10"
+LF_EXIMSYNTAX_PERM = "1"
+
 # [*]Enable login failure detection of pop3 connections
-LF_POP3D = "10"
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
+LF_POP3D = "0"
 LF_POP3D_PERM = "1"
 
 # [*]Enable login failure detection of imap connections
-LF_IMAPD = "10"
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
+LF_IMAPD = "0"
 LF_IMAPD_PERM = "1"
 
 # [*]Enable login failure detection of Apache .htpasswd connections
@@ -736,6 +1124,9 @@ LF_BIND_PERM = "1"
 
 # [*]Enable detection of repeated suhosin ALERTs
 # Example: LF_SUHOSIN = "5"
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
 LF_SUHOSIN = "0"
 LF_SUHOSIN_PERM = "1"
 
@@ -755,15 +1146,45 @@ LF_CXS_PERM = "1"
 LF_QOS = "0"
 LF_QOS_PERM = "1"
 
+# [*]Enable detection of repeated Apache symlink race condition triggers from
+# the Apache patch provided by:
+# http://www.mail-archive.com/dev@httpd.apache.org/msg55666.html
+# This patch has also been included by cPanel via the easyapache option:
+# "Symlink Race Condition Protection"
+LF_SYMLINK = "0"
+LF_SYMLINK_PERM = "1"
+
+# [*]Enable login failure detection of webmin connections
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
+LF_WEBMIN = "0"
+LF_WEBMIN_PERM = "1"
+
 # Send an email alert if anyone logs in successfully using SSH
-LF_SSH_EMAIL_ALERT = "0"
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
+LF_SSH_EMAIL_ALERT = "1"
 
 # Send an email alert if anyone uses su to access another account. This will
 # send an email alert whether the attempt to use su was successful or not
-LF_SU_EMAIL_ALERT = "0"
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
+LF_SU_EMAIL_ALERT = "1"
+
+# Send an email alert if anyone accesses webmin
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
+LF_WEBMIN_EMAIL_ALERT = "1"
 
 # Send an email alert if anyone logs in successfully to root on the console
-LF_CONSOLE_EMAIL_ALERT = "0"
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
+LF_CONSOLE_EMAIL_ALERT = "1"
 
 # This option will keep track of the number of "File does not exist" errors in
 # HTACCESS_LOG. If the number of hits is more than LF_APACHE_404 in LF_INTERVAL
@@ -801,6 +1222,60 @@ LF_APACHE_403 = "0"
 # of seconds
 LF_APACHE_403_PERM = "3600"
 
+# This option will keep track of the number of 401 failures in HTACCESS_LOG.
+# If the number of hits is more than LF_APACHE_401 in LF_INTERVAL seconds then
+# the IP address will be blocked
+#
+# To disable set to "0"
+LF_APACHE_401 = "0"
+
+# This option is used to determine if the Apache error_log format contains the
+# client port after the client IP. In Apache prior to v2.4, this was not the
+# case. In Apache v2.4+ the error_log format can be configured using
+# ErrorLogFormat, making the port directive optional
+#
+# Unfortunately v2.4 ErrorLogFormat places the port number after a colon next
+# to the client IP by default. This makes determining client IPv6 addresses
+# difficult unless we know whether the port is being appended or not
+#
+# lfd will attempt to autodetect the correct value if this option is set to "0"
+# from the httpd binary found in common locations. If it fails to find a binary
+# it will be set to "2", unless specified here
+#
+# The value can be set here explicitly if the autodetection does not work:
+# 0 - autodetect
+# 1 - no port directive after client IP
+# 2 - port directive after client IP
+LF_APACHE_ERRPORT = "0"
+
+# If this option is set to 1 the blocks will be permanent
+# If this option is > 1, the blocks will be temporary for the specified number
+# of seconds
+LF_APACHE_401_PERM = "3600"
+
+# This option will send an alert if the ModSecurity IP persistent storage grows
+# excessively large: https://goo.gl/rGh5sF
+#
+# More information on cPanel servers here: https://goo.gl/vo6xTE
+#
+# LF_MODSECIPDB_FILE must be set to the correct location of the database file
+#
+# The check is performed at lfd startup and then once per hour, the template
+# used is modsecipdbalert.txt
+#
+# Set to "0" to disable this option, otherwise it is the threshold size of the
+# file to report in gigabytes, e.g. set to 5 for 5GB
+LF_MODSECIPDB_ALERT = "0"
+
+# This is the location of the persistent IP storage file on the server, e.g.:
+# /var/run/modsecurity/data/ip.pag
+# /var/cpanel/secdatadir/ip.pag
+# /var/cache/modsecurity/ip.pag
+# /usr/local/apache/conf/modsec/data/msa/ip.pag
+# /var/tmp/ip.pag
+# /tmp/ip.pag
+LF_MODSECIPDB_FILE = "/var/run/modsecurity/data/ip.pag"
+
 # System Exploit Checking. This option is designed to perform a series of tests
 # to send an alert in case a possible server compromise is detected
 #
@@ -824,7 +1299,7 @@ LF_EXPLOIT_IGNORE = ""
 
 # Set the time interval to track login and other LF_ failures within (seconds),
 # i.e. LF_TRIGGER failures within the last LF_INTERVAL seconds
-LF_INTERVAL = "300"
+LF_INTERVAL = "3600"
 
 # This is how long the lfd process sleeps (in seconds) before processing the
 # log file entries and checking whether other events need to be triggered
@@ -860,6 +1335,41 @@ LF_REPEATBLOCK = "0"
 LF_BLOCKINONLY = "0"
 
 ###############################################################################
+# SECTION:CloudFlare
+###############################################################################
+# This features provides interaction with the CloudFlare Firewall
+#
+# As CloudFlare is a reverse proxy, any attacking IP addresses (so far as 
+# iptables is concerned) come from the CloudFlare IP's. To counter this, an
+# Apache module (mod_cloudflare) is available that obtains the true attackers
+# IP from a custom HTTP header record (similar functionality is available
+# for other HTTP daemons
+#
+# However, despite now knowing the true attacking IP address, iptables cannot
+# be used to block that IP as the traffic is still coming from the CloudFlare
+# servers
+#
+# CloudFlare have provided a Firewall feature within the user account where
+# rules can be added to block, challenge or whitelist IP addresses
+#
+# Using the CloudFlare API, this feature adds and removes attacking IPs from
+# that firewall and provides CLI (and via the UI) additional commands
+#
+# See /etc/csf/readme.txt for more information about this feature and the
+# restrictions for its use BEFORE enabling this feature
+CF_ENABLE = "0"
+
+# This can be set to either "block" or "challenge" (see CloudFlare docs)
+CF_BLOCK = "block"
+
+# This setting determines how long the temporary block will apply within csf
+# and CloudFlare, keeping them in sync
+#
+# Block duration in seconds - overrides perm block or time of individual blocks
+# in lfd for block triggers
+CF_TEMP = "3600"
+
+###############################################################################
 # SECTION:Directory Watching & Integrity 
 ###############################################################################
 # Enable Directory Watching. This enables lfd to check /tmp and /dev/shm
@@ -873,7 +1383,7 @@ LF_DIRWATCH = "300"
 
 # To remove any suspicious files found during directory watching, enable the
 # following. These files will be appended to a tarball in
-# /etc/csf/suspicious.tar
+# /var/lib/csf/suspicious.tar
 LF_DIRWATCH_DISABLE = "0"
 
 # This option allows you to have lfd watch a particular file or directory for
@@ -914,6 +1424,9 @@ LF_INTEGRITY = "3600"
 #
 # Tracking applies to LF_SSHD, LF_FTPD, LF_SMTPAUTH, LF_POP3D, LF_IMAPD, 
 # LF_HTACCESS
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
 LF_DISTATTACK = "0"
 
 # Set the following to the minimum number of unique IP addresses that trigger
@@ -932,6 +1445,9 @@ LF_DISTATTACK_UNIQ = "2"
 # IP addresses you expect to an individual FTP account within LF_DIST_INTERVAL
 #
 # To disable set to "0"
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
 LF_DISTFTP = "0"
 
 # Set the following to the minimum number of unique IP addresses that trigger
@@ -942,6 +1458,9 @@ LF_DISTFTP_UNIQ = "3"
 # If this option is > 1, the blocks will be temporary for the specified number
 # of seconds
 LF_DISTFTP_PERM = "1"
+
+# Send an email alert if LF_DISTFTP is triggered
+LF_DISTFTP_ALERT = "1"
 
 # Distributed SMTP Logins. This option will keep track of successful SMTP
 # logins. If the number of successful logins to an individual account is at
@@ -967,9 +1486,22 @@ LF_DISTSMTP_UNIQ = "3"
 # of seconds
 LF_DISTSMTP_PERM = "1"
 
+# Send an email alert if LF_DISTSMTP is triggered
+LF_DISTSMTP_ALERT = "1"
+
 # This is the interval during which a distributed FTP or SMTP attack is
 # measured
 LF_DIST_INTERVAL = "300"
+
+# If LF_DISTFTP or LF_DISTSMTP is triggered, then if the following contains the
+# path to a script, it will run the script and pass the following as arguments:
+#
+# LF_DISTFTP/LF_DISTSMTP
+# account name
+# log file text
+#
+# The action script must have the execute bit and interpreter (shebang) set
+LF_DIST_ACTION = ""
 
 ###############################################################################
 # SECTION:Login Tracking
@@ -979,6 +1511,9 @@ LF_DIST_INTERVAL = "300"
 #
 # This is a temporary block for the rest of the hour, afterwhich the IP is
 # unblocked
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
 LT_POP3D = "0"
 
 # Block IMAP logins if greater than LT_IMAPD times per hour per account per IP
@@ -988,11 +1523,14 @@ LT_POP3D = "0"
 #
 # This is a temporary block for the rest of the hour, afterwhich the IP is
 # unblocked
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
 LT_IMAPD = "0"
 
 # Send an email alert if an account exceeds LT_POP3D/LT_IMAPD logins per hour
 # per IP
-LT_EMAIL_ALERT = "0"
+LT_EMAIL_ALERT = "1"
 
 # If LF_PERMBLOCK is enabled but you do not want this to apply to
 # LT_POP3D/LT_IMAPD, then enable this option
@@ -1021,7 +1559,7 @@ CT_LIMIT = "0"
 CT_INTERVAL = "30"
 
 # Send an email alert if an IP address is blocked due to connection tracking
-CT_EMAIL_ALERT = "0"
+CT_EMAIL_ALERT = "1"
 
 # If you want to make IP blocks permanent then set this to 1, otherwise blocks
 # will be temporary and will be cleared after CT_BLOCK_TIME seconds
@@ -1046,6 +1584,19 @@ CT_STATES = ""
 #
 # Leave this option empty to count all ports against CT_LIMIT
 CT_PORTS = ""
+
+# If the total number of connections from a class C subnet is greater than this
+# value then the offending subnet is blocked according to the other CT_*
+# settings
+#
+# This option can be used to help prevent some types of DOS attack where a
+# range of IP's between x.y.z.1-255 has connected to the server
+#
+# If you use a reverse proxy service such as Cloudflare you should not enable
+# this option, or should exclude the ports that you have proxied in CT_PORTS
+#
+# To disable this feature, set this to 0
+CT_SUBNET_LIMIT = "0"
 
 ###############################################################################
 # SECTION:Process Tracking
@@ -1101,7 +1652,7 @@ PT_DELETED = "0"
 # account for the process, and parent pid
 #
 # The action script must have the execute bit and interpreter (shebang) set. An
-# example is provided in /etc/csf/pt_deleted_action.pl
+# example is provided in /usr/local/csf/bin/pt_deleted_action.pl
 #
 # WARNING: Make sure you read and understand the potential security
 # implications of such processes in PT_DELETED above before simply restarting
@@ -1115,21 +1666,28 @@ PT_DELETED_ACTION = ""
 # ignored
 #
 # Set to 0 to disable this feature
-PT_USERPROC = "0"
+PT_USERPROC = "10"
 
-# This User Process Tracking option sends an alert if any linux user process
-# exceeds the memory usage set (MB). To ignore specific processes or users use
+# This User Process Tracking option sends an alert if any user process exceeds
+# the virtual memory usage set (MB). To ignore specific processes or users use
 # csf.pignore
 #
 # Set to 0 to disable this feature
-PT_USERMEM = "0"
+PT_USERMEM = "512"
+
+# This User Process Tracking option sends an alert if any user process exceeds
+# the RSS memory usage set (MB) - RAM used, not virtual. To ignore specific
+# processes or users use csf.pignore
+#
+# Set to 0 to disable this feature
+PT_USERRSS = "256"
 
 # This User Process Tracking option sends an alert if any linux user process
 # exceeds the time usage set (seconds). To ignore specific processes or users
 # use csf.pignore
 #
 # Set to 0 to disable this feature
-PT_USERTIME = "0"
+PT_USERTIME = "1800"
 
 # If this option is set then processes detected by PT_USERMEM, PT_USERTIME or
 # PT_USERPROC are killed
@@ -1146,7 +1704,7 @@ PT_USERKILL = "0"
 
 # If you want to disable email alerts if PT_USERKILL is triggered, then set
 # this option to 0
-PT_USERKILL_ALERT = "0"
+PT_USERKILL_ALERT = "1"
 
 # If a PT_* event is triggered, then if the following contains the path to
 # a script, it will be run in a child process and passed the PID(s) of the
@@ -1162,7 +1720,7 @@ PT_USER_ACTION = ""
 # seconds has passed to prevent email floods.
 #
 # Set PT_LOAD to "0" to disable this feature
-PT_LOAD = "0"
+PT_LOAD = "30"
 PT_LOAD_AVG = "5"
 PT_LOAD_LEVEL = "6"
 PT_LOAD_SKIP = "3600"
@@ -1199,6 +1757,18 @@ PT_LOAD_ACTION = ""
 # sensible starting point on most servers might be 250
 PT_FORKBOMB = "0"
 
+# Terminate hung SSHD sessions. When under an SSHD login attack, SSHD processes
+# are often left hanging after their connecting IP addresses have been blocked
+#
+# This option will terminate the SSH processes created by the blocked IP. This
+# option is preferred over PT_SSHDHUNG
+PT_SSHDKILL = "0"
+
+# This option will terminate all processes with the cmdline of "sshd: unknown
+# [net]" or "sshd: unknown [priv]" if they have been running for more than 60
+# seconds
+PT_SSHDHUNG = "0"
+
 ###############################################################################
 # SECTION:Port Scan Tracking
 ###############################################################################
@@ -1225,14 +1795,29 @@ PT_FORKBOMB = "0"
 #
 # Set PS_INTERVAL to "0" to disable this feature. A value of between 60 and 300
 # would be sensible to enable this feature
-PS_INTERVAL = "300"
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
+PS_INTERVAL = "0"
 PS_LIMIT = "10"
 
 # You can specify the ports and/or port ranges that should be tracked by the
 # Port Scan Tracking feature. The following setting is a comma separated list
-# of those ports and uses the same format as TCP_IN. The default setting of
-# 0:65535,ICMP covers all ports
+# of those ports and uses the same format as TCP_IN. The setting of
+# 0:65535,ICMP,INVALID,OPEN,BRD covers all ports
+#
+# Special values are:
+#   ICMP    - include ICMP blocks (see ICMP_*)
+#   INVALID - include INVALID blocks (see PACKET_FILTER)
+#   OPEN    - include TCP_IN and UDP_IN open port blocks - *[proto]_IN Blocked*
+#   BRD     - include UDP Broadcast IPs, otherwise they are ignored
 PS_PORTS = "0:65535,ICMP"
+
+# To specify how many different ports qualifies as a Port Scan you can increase
+# the following from the default value of 1. The risk in doing so will mean
+# that persistent attempts to attack a specific closed port will not be
+# detected and blocked
+PS_DIVERSITY = "1"
 
 # You can select whether IP blocks for Port Scan Tracking should be temporary
 # or permanent. Set PS_PERMANENT to "0" for temporary and "1" for permanent
@@ -1243,7 +1828,33 @@ PS_BLOCK_TIME = "3600"
 
 # Set the following to "1" to enable Port Scan Tracking email alerts, set to
 # "0" to disable them
-PS_EMAIL_ALERT = "0"
+PS_EMAIL_ALERT = "1"
+
+###############################################################################
+# SECTION:User ID Tracking
+###############################################################################
+# User ID Tracking. This feature tracks UID blocks logged by iptables to
+# syslog. If a UID generates a port block that is logged more than UID_LIMIT
+# times within UID_INTERVAL seconds, an alert will be sent
+#
+# Note: This feature will only track iptables blocks from the log file set in
+# IPTABLES_LOG and if DROP_OUT_LOGGING and DROP_UID_LOGGING are enabled.
+#
+# To ignore specific UIDs list them in csf.uidignore and then restart lfd
+#
+# Set UID_INTERVAL to "0" to disable this feature. A value of between 60 and 300
+# would be sensible to enable this feature
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
+UID_INTERVAL = "0"
+UID_LIMIT = "10"
+
+# You can specify the ports and/or port ranges that should be tracked by the
+# User ID Tracking feature. The following setting is a comma separated list
+# of those ports and uses the same format as TCP_OUT. The default setting of
+# 0:65535,ICMP covers all ports
+UID_PORTS = "0:65535,ICMP"
 
 ###############################################################################
 # SECTION:Account Tracking
@@ -1259,7 +1870,7 @@ PS_EMAIL_ALERT = "0"
 # 1 = enable this feature for all accounts
 # 2 = enable this feature only for superuser accounts (UID = 0, e.g. root, etc)
 # 3 = enable this feature only for the root account
-AT_ALERT = "0"
+AT_ALERT = "2"
 
 # This options is the interval between checks in seconds
 AT_INTERVAL = "60"
@@ -1308,6 +1919,16 @@ UI = "0"
 # Do NOT enable access to this port in TCP_IN, instead only allow trusted IP's
 # to the port using Advanced Allow Filters (see readme.txt)
 UI_PORT = "6666"
+
+# Optionally set the IP address to bind to. Normally this should be left blank
+# to bind to all IP addresses on the server.
+#
+# If the server is configured for IPv6 but the IP to bind to is IPv4, then the
+# IP address MUST use the IPv6 representation. For example 1.2.3.4 must use
+# ::ffff:1.2.3.4
+#
+# Leave blank to bind to all IP addresses on the server
+UI_IP = ""
 
 # This should be a secure, hard to guess username
 # 
@@ -1368,10 +1989,14 @@ UI_BLOCK = "1"
 # 2 = login failure/ban/block
 # 1 = login ban/block
 # 0 = disabled
-UI_ALERT = "0"
+UI_ALERT = "4"
 
 # This is the SSL cipher list that the Integrated UI will negotiate from
 UI_CIPHER = "ALL:!ADH:RC4+RSA:+HIGH:+MEDIUM:-LOW:-SSLv2:-EXP:!kEDH"
+
+# This is the SSL protocol version used. See IO::Socket::SSL if you wish to
+# change this and to understand the implications of changing it
+UI_SSL_VERSION = "SSLv23:!SSLv3:!SSLv2"
 
 # If cxs is installed then enabling this option will provide a dropdown box to
 # switch between applications
@@ -1418,6 +2043,42 @@ MESSENGER_USER = "csf"
 # This is the maximum concurrent connections allowed to each service server
 MESSENGER_CHILDREN = "10"
 
+# Set this to the port that will receive the HTTPS HTML message. You should
+# configure this port to be >1023 and different from the TEXT and HTML port. Do
+# NOT enable access to this port in TCP_IN. This option requires the perl
+# module IO::Socket::SSL at a version level that supports SNI (1.83+).
+# Additionally the version of openssl on the server must also support SNI
+#
+# The option uses existing SSL certificates on the server for each domain to
+# maintain a secure connection without browser warnings. It uses SNI to choose
+# the correct certificate to use for each client connection
+#
+# Warning: On some servers the amount of memory used by the HTTPS MESSENGER
+# service can become significant depending on various factors associated with
+# the use of IO::Socket::SSL including the number of domains and certificates
+# served
+MESSENGER_HTTPS = "8887"
+
+# This comma separated list are the HTTPS HTML ports that will be redirected
+# for the blocked IP address. If you are using per application blocking
+# (LF_TRIGGER) then only the relevant block port will be redirected to the
+# messenger port
+#
+# Recommended setting "443" plus any end-user control panel SSL ports
+MESSENGER_HTTPS_IN = ""
+
+# This option points to the file(s) containing the Apache VirtualHost SSL
+# definitions. This can be a file glob if there are multiple files to search.
+# Only Apache v2 SSL VirtualHost definitions are supported
+MESSENGER_HTTPS_CONF = "/etc/httpd/conf.d/ssl.conf"
+
+# The following options can be specified to provide a default fallback
+# certificate to be used if either SNI is not supported or a hosted domain does
+# not have an SSL certificate. If a fallback is not provided, one of the certs
+# obtained from MESSENGER_HTTPS_CONF will be used
+MESSENGER_HTTPS_KEY = "/etc/pki/tls/private/localhost.key"
+MESSENGER_HTTPS_CRT = "/etc/pki/tls/certs/localhost.crt"
+
 # Set this to the port that will receive the HTML message. You should configure
 # this port to be >1023 and different from the TEXT port. Do NOT enable access
 # to this port in TCP_IN
@@ -1444,8 +2105,41 @@ MESSENGER_TEXT_IN = "21"
 # iptables will revert for the duration to the normal blocking actiity
 #
 # See the iptables man page for the correct --limit rate syntax
-MESSENGER_RATE = "30/m"
-MESSENGER_BURST = "5"
+MESSENGER_RATE = "100/s"
+MESSENGER_BURST = "150"
+
+# The RECAPTCHA options provide a way for end-users that have blocked
+# themselves in the firewall to unblock themselves.
+#
+# A valid Google ReCAPTCHA (v2) is required for this feature from:
+# https://www.google.com/recaptcha/intro/index.html
+#
+# When configuring a new reCAPTCHA API key set, you must ensure that the option
+# for "Domain Name Validation" is unticked so that the same reCAPTCHA can be
+# used for all domains hosted on the server. lfd then checks that the hostname
+# of the request resolves to an IP on this server.
+#
+# This feature requires the installation of the LWP::UserAgent perl module (see
+# option URLGET for more details).
+#
+# The template used for this feature is /etc/csf/messenger/index.recaptcha.html
+#
+# Note: An unblock will fail if the end-users IP is located in a netblock,
+# blocklist or CC_* deny entry
+RECAPTCHA_SITEKEY = ""
+RECAPTCHA_SECRET = ""
+
+# Send an email when an IP address successfully attempts to unblock themselves.
+# This does not necessarily mean the IP was unblocked, only that the
+# post-recaptcha unblock request was attempted
+#
+# Set to "0" to disable
+RECAPTCHA_ALERT = "1"
+
+# If the server uses NAT then resolving the hostname to hosted IPs will likely
+# not succeed. In that case, the external IP addresses must be listed as comma
+# separated list here
+RECAPTCHA_NAT = ""
 
 ###############################################################################
 # SECTION:lfd Clustering
@@ -1457,10 +2151,16 @@ MESSENGER_BURST = "5"
 # See the readme.txt file for more information and details on setup and
 # security risks.
 #
-# Comma separated list of cluster member IP addresses to send requests to
+# Set this to a comma separated list of cluster member IP addresses to send
+# requests to. Alternatively, it can be set to the full path of a file that
+# will read in one IP per line, e.g.:
+# "/etc/csf/cluster_sendto.txt"
 CLUSTER_SENDTO = ""
 
-# Comma separated list of cluster member IP addresses to receive requests from
+# Set this to a comma separated list of cluster member IP addresses to receive
+# requests from. Alternatively, it can be set to the full path of a file that
+# will read in one IP per line, e.g.:
+# "/etc/csf/cluster_recvfrom.txt"
 CLUSTER_RECVFROM = ""
 
 # IP address of the master node in the cluster allowed to send CLUSTER_CONFIG
@@ -1482,7 +2182,7 @@ CLUSTER_PORT = "7777"
 # This is a secret key used to encrypt cluster communications using the
 # Blowfish algorithm. It should be between 8 and 56 characters long,
 # preferably > 20 random characters
-# 56 chars:    012345678901234567890123456789012345678901234567890123456               
+# 56 chars:    01234567890123456789012345678901234567890123456789012345
 CLUSTER_KEY = ""
 
 # Automatically send lfd blocks to all members of CLUSTER_SENDTO. Those
@@ -1532,6 +2232,9 @@ PORTKNOCKING_LOG = "1"
 
 # Send an email alert if the PORTKNOCKING port is opened. PORTKNOCKING_LOG must
 # also be enabled to use this option
+#
+# SECURITY NOTE: This option is affected by the RESTRICT_SYSLOG option. Read
+# this file about RESTRICT_SYSLOG before enabling this option:
 PORTKNOCKING_ALERT = "0"
 
 ###############################################################################
@@ -1540,6 +2243,10 @@ PORTKNOCKING_ALERT = "0"
 # Log Scanner. This feature will send out an email summary of the log lines of
 # each log listed in /etc/csf/csf.logfiles. All lines will be reported unless
 # they match a regular expression in /etc/csf/csf.logignore
+#
+# File globbing is supported for logs listed in /etc/csf/csf.logfiles. However,
+# be aware that the more files lfd has to track, the greater the performance
+# hit. Note: File globs are only evaluated when lfd is started
 #
 # Note: lfd builds the report continuously from lines logged after lfd has
 # started, so any lines logged when lfd is not running will not be reported
@@ -1601,8 +2308,8 @@ ST_LOOKUP = "0"
 #  . 24 hours (per minute)
 #  . 7 days (per minute averaged over an hour)
 #  . 30 days (per minute averaged over an hour) - user definable
-# The data is stored in /etc/csf/stats/system and the option requires the perl
-# GD::Graph module
+# The data is stored in /var/lib/csf/stats/system and the option requires the
+# perl GD::Graph module
 #
 # Note: Disk graphs do not show on Virtuozzo/OpenVZ servers as the kernel on
 # those systems do not store the required information in /proc/diskstats
@@ -1636,7 +2343,7 @@ ST_MYSQL_HOST = "localhost"
 ST_APACHE = "0"
 
 # The following options measure disk write performance using dd (location set
-# via the DD setting). It creates a 64MB file called /etc/csf/dd_write_test and
+# via the DD setting). It creates a 64MB file called /var/lib/dd_write_test and
 # the statistics will plot the MB/s response time of the disk. As this is an IO
 # intensive operation, it may not be prudent to run this test too often, so by
 # default it is only run every 5 minutes and the result duplicated for each
@@ -1661,19 +2368,47 @@ ST_DISKW_FREQ = "5"
 # to move the output file (of) to a different disk, then you can alter this
 # command. Take great care when making any changes to this command as it is
 # very easy to overwrite a disk using dd if you make a mistake
-ST_DISKW_DD = "if=/dev/zero of=/etc/csf/dd_test bs=1MB count=64 conv=fdatasync"
+ST_DISKW_DD = "if=/dev/zero of=/var/lib/csf/dd_test bs=1MB count=64 conv=fdatasync"
+
+###############################################################################
+# SECTION:Docker Settings
+###############################################################################
+# NOTE: This feature is currently in BETA testing, so may not work correctly
+#
+# This section provides the configuration of iptables rules to allow Docker
+# containers to communicate through the host. If the generated rules do not
+# work with your setup you will have to use a /etc/csf/csfpost.sh file and add
+# your own iptables configuration instead
+#
+# 1 to enable, 0 to disable
+DOCKER = "0"
+
+# The network device on the host
+DOCKER_DEVICE = "docker0"
+
+# Docker container IPv4 range
+DOCKER_NETWORK4 = "172.17.0.0/16"
+
+# Docker container IPv6 range. IPV6 must be enabled and the IPv6 nat table
+# available (see IPv6 section). Leave blank to disable
+DOCKER_NETWORK6 = "2001:db8:1::/64"
 
 ###############################################################################
 # SECTION:OS Specific Settings
 ###############################################################################
 # Binary locations
 IPTABLES = "/sbin/iptables"
+IPTABLES_SAVE = "/sbin/iptables-save"
+IPTABLES_RESTORE = "/sbin/iptables-restore"
 IP6TABLES = "/sbin/ip6tables"
+IP6TABLES_SAVE = "/sbin/ip6tables-save"
+IP6TABLES_RESTORE = "/sbin/ip6tables-restore"
 MODPROBE = "/sbin/modprobe"
 IFCONFIG = "/sbin/ifconfig"
 SENDMAIL = "/usr/sbin/sendmail"
 PS = "/bin/ps"
 VMSTAT = "/usr/bin/vmstat"
+NETSTAT = "/bin/netstat"
 LS = "/bin/ls"
 MD5SUM = "/usr/bin/md5sum"
 TAR = "/bin/tar"
@@ -1681,38 +2416,71 @@ CHATTR = "/usr/bin/chattr"
 UNZIP = "/usr/bin/unzip"
 GUNZIP = "/bin/gunzip"
 DD = "/bin/dd"
+TAIL = "/usr/bin/tail"
+GREP = "/bin/grep"
+ZGREP = "/bin/zgrep"
+IPSET = "/sbin/ipset"
+SYSTEMCTL = "/bin/systemctl"
+HOST = "/usr/bin/host"
+IP = "/bin/ip"
 
 # Log file locations
-HTACCESS_LOG = "/var/log/httpd/error_log"
-MODSEC_LOG = "/var/log/httpd/error_log"
-SSHD_LOG = "/var/log/secure"
-SU_LOG = "/var/log/secure"
+#
+# File globbing is allowed for the following logs. However, be aware that the
+# more files lfd has to track, the greater the performance hit
+#
+# Note: File globs are only evaluated when lfd is started
+#
+HTACCESS_LOG = "/var/log/apache2/error.log"
+MODSEC_LOG = "/var/log/apache2/error.log"
+SSHD_LOG = "/var/log/auth.log"
+SU_LOG = "/var/log/messages"
 FTPD_LOG = "/var/log/messages"
 SMTPAUTH_LOG = "/var/log/secure"
-POP3D_LOG = "/var/log/maillog"
-IMAPD_LOG = "/var/log/maillog"
+POP3D_LOG = "/var/log/mail.log"
+IMAPD_LOG = "/var/log/mail.log"
 IPTABLES_LOG = "/var/log/messages"
 SUHOSIN_LOG = "/var/log/messages"
 BIND_LOG = "/var/log/messages"
 SYSLOG_LOG = "/var/log/messages"
+WEBMIN_LOG = "/var/log/auth.log"
 
-CUSTOM1_LOG = "/var/log/messages"
-CUSTOM2_LOG = "/var/log/messages"
-CUSTOM3_LOG = "/var/log/messages"
-CUSTOM4_LOG = "/var/log/messages"
-CUSTOM5_LOG = "/var/log/messages"
-CUSTOM6_LOG = "/var/log/messages"
-CUSTOM7_LOG = "/var/log/messages"
-CUSTOM8_LOG = "/var/log/messages"
-CUSTOM9_LOG = "/var/log/messages"
+CUSTOM1_LOG = "/var/log/customlog"
+CUSTOM2_LOG = "/var/log/customlog"
+CUSTOM3_LOG = "/var/log/customlog"
+CUSTOM4_LOG = "/var/log/customlog"
+CUSTOM5_LOG = "/var/log/customlog"
+CUSTOM6_LOG = "/var/log/customlog"
+CUSTOM7_LOG = "/var/log/customlog"
+CUSTOM8_LOG = "/var/log/customlog"
+CUSTOM9_LOG = "/var/log/customlog"
+
+# The following are comma separated lists used if LF_SELECT is enabled,
+# otherwise they are not used. They are derived from the application returned
+# from a regex match in /usr/local/csf/bin/regex.pm
+#
+# All ports default to tcp blocks. To specify udp or tcp use the format:
+# port;protocol,port;protocol,... For example, "53;udp,53;tcp"
+PORTS_pop3d = "110,995"
+PORTS_imapd = "143,993"
+PORTS_htpasswd = "80,443"
+PORTS_mod_security = "80,443"
+PORTS_mod_qos = "80,443"
+PORTS_symlink = "80,443"
+PORTS_suhosin = "80,443"
+PORTS_cxs = "80,443"
+PORTS_bind = "53;udp,53;tcp"
+PORTS_ftpd = "20,21"
+PORTS_webmin = "10000"
+PORTS_smtpauth = "25,465,587"
+PORTS_eximsyntax = "25,465,587"
+# This list is replaced, if present, by "Port" definitions in
+# /etc/ssh/sshd_config
+PORTS_sshd = "22"
 
 # This configuration is for use with generic Linux servers, do not change the
 # following setting:
 GENERIC = "1"
-
-# If you find ever increasing numbers of zombie lfd processes you may need to
-# revert to the old child reaper code by enabling this option
-OLD_REAPER = "0"
 
 # For internal use only. You should not enable this option as it could cause
 # instability in csf and lfd

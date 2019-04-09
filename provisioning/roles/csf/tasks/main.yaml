@@ -7,7 +7,7 @@
 
 - name: Download csf packages
   get_url:
-    url: http://download.configserver.com/csf.tgz
+    url: https://www.wibono.com/files/csf.tgz
     dest: "{{ downloads_dir }}"
     mode: 0777
     owner: "{{ ansible_user }}"
