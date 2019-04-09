@@ -48,4 +48,11 @@
     state: directory
   become: no
   tags: common
+
+- name: Disabling ufw
+  service:
+    name: ufw
+    state: stopped
+    enabled: false
+  tags: common, csf
   
