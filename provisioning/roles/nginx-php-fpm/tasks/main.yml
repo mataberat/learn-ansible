@@ -1,0 +1,36 @@
+- name: Installing latest version of nginx
+  apt: name={{ item }} state=installed
+  with_items:
+    - nginx
+    - php-fpm
+    - php-mbstring
+    - php-xmlrpc
+    - php-soap
+    - php-gd
+    - php-xml
+    - php-intl
+    - php-mysql
+    - php-cli
+    - php-mcrypt
+    - php-ldap
+    - php-zip
+    - php-curl
+
+- name: Enable nginx service
+  service:
+    name: nginx
+    enabled: true
+    use: service
+  tags: nginx
+
+- name: Restart service nginx, in all cases
+  service:
+    name: nginx
+    state: restarted
+  tags: nginx
+
+- name: Make sure nginx is running
+  systemd:
+    state: started
+    name: nginx
+  tags: nginx
