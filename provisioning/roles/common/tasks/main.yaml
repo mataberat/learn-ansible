@@ -6,7 +6,7 @@
     owner: root
     group: root
     mode: 0755
-  tags: common
+  tags: common, bootup_config
 
 - name: Installing packages
   apt:
@@ -27,28 +27,28 @@
       - iptables
     state: present
     update_cache: yes
-  tags: common
+  tags: common, bootup_config
 
   # Need at least 8.1.0 to pick up manylinux1 wheel packages
 - name: Upgrade pip2 to the latest version
   pip: name=pip state=latest executable=pip2
-  tags: common
+  tags: common, bootup_config
 
   # Need at least 8.1.0 to pick up manylinux1 wheel packages
 - name: Upgrade pip3 to the latest version
   pip: name=pip state=latest executable=pip3
-  tags: common
+  tags: common, bootup_config
 
 - name: Add locale settings
   copy: src="locale" dest="/etc/default/locale" owner=root group=root mode=0644
-  tags: common
+  tags: common, bootup_config
 
 - name: Create Downloads dir
   file:
     path: '{{ downloads_dir }}'
     state: directory
   become: no
-  tags: common
+  tags: common, bootup_config
 
 - name: Disabling ufw
   service:

@@ -12,7 +12,7 @@
     mode: 0777
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
-  tags: csf
+  tags: csf, bootup_config
   when: csf_installed_result is failed
 
 - name: Extract csf
@@ -20,14 +20,14 @@
     src: "{{ downloads_dir }}/csf.tgz"
     dest: "{{ home_dir }}"
     remote_src: yes
-  tags: csf
+  tags: csf, bootup_config
   when: csf_installed_result is failed
 
 - name: Installing csf
   command: "sh install.sh"
   args:
     chdir: "{{ home_dir }}/csf"
-  tags: csf
+  tags: csf, bootup_config
   register: install
   when: csf_installed_result is failed
 
@@ -35,12 +35,12 @@
   template:
     src: 'csf.conf.j2'
     dest: /etc/csf/csf.conf
-  register: csf_conf
+  register: csf_conf, bootup_config
   tags: csf, csf-update
 
 - name: Enable csf
   command: csf -e
-  tags: csf
+  tags: csf, bootup_config
   when: install is succeeded
 
 - name: Enable lfd
@@ -48,7 +48,7 @@
     name: lfd
     enabled: yes
     state: started
-  tags: csf
+  tags: csf, bootup_config
   when: install is succeeded
 
 # Waiting for `name: Enable csf` task is completed.
