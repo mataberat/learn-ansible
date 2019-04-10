@@ -1,10 +1,12 @@
 - name: Vagrant for default-test
   hosts: vagrant-default-test
   user: ubuntu
-  become: yes
+  become: true
+  become_method: sudo
   gather_facts: yes
 
   roles:
+  - { role: user-management }
   - { role: kambing-repository }
   - { role: common }
   - { role: csf }
