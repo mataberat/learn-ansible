@@ -1,0 +1,28 @@
+- name: Check if user is available on system
+  command: "grep {{ item.username }} /etc/passwd"
+  register: user_exists
+  ignore_errors: true
+  changed_when: false
+  with_items: "{{ active_users }}"
+  tags: user-management
+
+- name: Create user
+  user:
+    name: "{{ item.username }}"
+    groups: "{{ item.groups }}"
+    home: "{{ item.home }}"
+    createhome: yes
+  register: create_user
+  with_items: "{{ active_users }}"
+  tags: user-management, create-user, bootup_config
+  when: user_exists is failed
+
+- name: Remove user
+  user:
+    name: "{{ item.username }}"
+    state: absent
+    remove: yes
+  register: remove_user
+  with_items: "{{ deactive_users }}"
+  tags: user-management, remove-user
+  when: user_exists is succeeded
