@@ -17,6 +17,28 @@
   tags: user-management, create-user, bootup_config
   when: user_exists is failed
 
+- name: Create .ssh folder for each user
+  file:
+    path: "/home/{{ item.username }}/.ssh"
+    mode: 700
+    state: directory
+  with_items: "{{ active_users }}"
+  register: create_ssh_folder
+  tags: user-management, bootup_config
+  when: create_user is succeeded
+
+- name: Insert a public key
+  authorized_key:
+    user: "{{ item.username }}"
+    state: present
+    key: "{{ lookup('file', '../../../../ssh/{{ item.username }}@vagrant.pub') }}"
+    path: "/home/{{ item.username }}/.ssh/authorized_keys"
+    manage_dir: false
+  register: insert_publickey
+  with_items: "{{ active_users }}"
+  tags: user-management, insert-publickey, bootup_config
+  when: create_ssh_folder is succeeded
+
 - name: Remove user
   user:
     name: "{{ item.username }}"
